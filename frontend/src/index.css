@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Dark is the default: an instrument panel, not a document. The signal
+     colours are shared -- state means the same thing in either theme -- so
+     only the surfaces and ink change between them. */
+  :root {
+    color-scheme: dark;
+    --panel: 18 22 31;
+    --panel-raised: 25 31 44;
+    --panel-high: 33 41 57;
+    --line: 42 50 69;
+    --line-bright: 58 68 89;
+    --ink: 232 237 247;
+    --ink-dim: 138 151 180;
+    --ink-faint: 92 104 133;
+  }
+
+  /* Light: paper and ink. Surfaces lighten as they rise rather than darken,
+     so the same raised/high ordering still reads, and the ink scale inverts.
+     The panel grain and glow are tuned down since they only work on dark. */
+  .theme-light {
+    color-scheme: light;
+    --panel: 244 246 250;
+    --panel-raised: 255 255 255;
+    --panel-high: 237 240 246;
+    --line: 214 220 230;
+    --line-bright: 190 198 212;
+    --ink: 26 32 44;
+    --ink-dim: 74 86 108;
+    --ink-faint: 124 136 158;
+  }
+
+  body {
+    @apply bg-panel text-ink font-sans antialiased;
+    /* A faint panel grain, so large dark areas have some material to them. */
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(34, 211, 165, 0.05), transparent),
+      linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 3px;
+  }
+
+  /* Paper wants none of the grain, and a warmer top wash. */
+  .theme-light body {
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(34, 211, 165, 0.06), transparent);
+  }
+
+  /* Every number in this interface is instrumentation: tabular, aligned. */
+  .tnum {
+    @apply font-mono tabular-nums;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-signal-live/70 ring-offset-2 ring-offset-panel;
+  }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: theme("colors.panel.DEFAULT"); }
+  ::-webkit-scrollbar-thumb {
+    background: theme("colors.line.DEFAULT");
+    border-radius: 6px;
+    border: 2px solid theme("colors.panel.DEFAULT");
+  }
+  ::-webkit-scrollbar-thumb:hover { background: theme("colors.line.bright"); }
+}
+
+@layer components {
+  .eyebrow {
+    @apply text-eyebrow uppercase font-medium text-ink-faint;
+  }
+
+  /* The hatched band that marks a hold on the meter tape. Diagonal hazard
+     stripes are the switchboard vernacular for "intentionally held". */
+  .hatch {
+    background-image: repeating-linear-gradient(
+      45deg,
+      rgba(244, 169, 60, 0.16) 0 6px,
+      transparent 6px 12px
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
