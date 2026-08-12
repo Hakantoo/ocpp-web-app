@@ -174,6 +174,7 @@ function CommandPanel({ cp }: { cp: ChargePoint }) {
   const reset = useChargerCommand("reset");
   const clearCache = useChargerCommand("clear-cache");
   const unlock = useChargerCommand("unlock");
+  const availability = useChargerCommand("availability");
   const getLocalListVersion = useChargerCommand("get-local-list-version");
   const sendLocalList = useChargerCommand("send-local-list");
   const reserveNow = useChargerCommand("reserve-now");
@@ -217,6 +218,7 @@ function CommandPanel({ cp }: { cp: ChargePoint }) {
     reset.isPending ||
     clearCache.isPending ||
     unlock.isPending ||
+    availability.isPending ||
     getLocalListVersion.isPending ||
     sendLocalList.isPending ||
     reserveNow.isPending ||
@@ -367,6 +369,41 @@ function CommandPanel({ cp }: { cp: ChargePoint }) {
             >
               Send
             </Button>
+          </CommandRow>
+
+          <CommandRow
+            label="ChangeAvailability"
+            hint="Takes connector 1 out of service, or brings it back -- distinct from a real Faulted condition."
+          >
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="hold"
+                busy={busy}
+                onClick={() =>
+                  send("ChangeAvailability(Inoperative)", () =>
+                    availability.mutateAsync({
+                      identity,
+                      body: { connector_id: 1, type: "Inoperative" },
+                    }),
+                  )
+                }
+              >
+                Inoperative
+              </Button>
+              <Button
+                busy={busy}
+                onClick={() =>
+                  send("ChangeAvailability(Operative)", () =>
+                    availability.mutateAsync({
+                      identity,
+                      body: { connector_id: 1, type: "Operative" },
+                    }),
+                  )
+                }
+              >
+                Operative
+              </Button>
+            </div>
           </CommandRow>
 
           <CommandRow

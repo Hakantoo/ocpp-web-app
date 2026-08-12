@@ -320,6 +320,7 @@ record underneath it.
 | POST | `/api/charge-points/{id}/trigger` | `TriggerMessage` |
 | POST | `/api/charge-points/{id}/clear-cache` | `ClearCache` |
 | POST | `/api/charge-points/{id}/unlock` | `UnlockConnector` |
+| POST | `/api/charge-points/{id}/availability` | `ChangeAvailability` |
 | POST | `/api/charge-points/{id}/diagnostics` | `GetDiagnostics` |
 | POST | `/api/charge-points/{id}/get-local-list-version` | `GetLocalListVersion` |
 | POST | `/api/charge-points/{id}/send-local-list` | `SendLocalList` |

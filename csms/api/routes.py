@@ -10,7 +10,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import sqlite3
-from typing import Any
+from typing import Any, Literal
 
 import aiosqlite
 from fastapi import APIRouter, Body, HTTPException, Query, Request
@@ -577,6 +577,23 @@ async def reset(
 ) -> dict[str, Any]:
     try:
         return await request.app.state.registry.reset(identity, type=type)
+    except CommandError as exc:
+        raise _handle(exc) from exc
+
+
+@router.post("/charge-points/{identity}/availability")
+async def change_availability(
+    request: Request,
+    identity: str,
+    connector_id: int = Body(..., embed=True),
+    type: Literal["Operative", "Inoperative"] = Body(..., embed=True),
+) -> dict[str, Any]:
+    """Take a connector in or out of service deliberately -- distinct from
+    Faulted, which is a real condition being reported, not a choice."""
+    try:
+        return await request.app.state.registry.change_availability(
+            identity, connector_id=connector_id, type=type
+        )
     except CommandError as exc:
         raise _handle(exc) from exc
 

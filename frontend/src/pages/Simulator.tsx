@@ -798,7 +798,7 @@ function ConnectorBench({
           }
         >
           <Zap size={13} />
-          {connector.power_offered ? "Withdraw power (C)" : "Offer power (C)"}
+          {connector.power_offered ? "Withdraw power" : "Offer power"}
         </Button>
 
         <Button

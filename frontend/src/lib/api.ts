@@ -336,6 +336,7 @@ export function useChargerCommand(
     | "reset"
     | "clear-cache"
     | "unlock"
+    | "availability"
     | "get-local-list-version"
     | "send-local-list"
     | "reserve-now"
