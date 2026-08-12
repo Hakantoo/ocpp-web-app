@@ -287,9 +287,13 @@ class SimulatedChargePoint(BaseChargePoint):
             "Connector %s: %s is full, the car stopped drawing",
             connector.connector_id, connector.vehicle.name,
         )
-        await self._status(
-            connector.connector_id, ChargePointStatus.suspended_ev.value
-        )
+        if connector.status != ChargePointStatus.suspended_ev.value:
+            # Only announce if this is genuinely new information -- a card
+            # swiped on a connector already sitting at 100% has nothing
+            # further to say here.
+            await self._status(
+                connector.connector_id, ChargePointStatus.suspended_ev.value
+            )
 
         async def _close_after_dwell() -> None:
             # Real chargers sit in SuspendedEV for a while before terminating
