@@ -29,8 +29,8 @@ const NAV: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
   { to: "/", label: "Overview", icon: LayoutGrid, end: true },
   { to: "/chargers", label: "Chargers", icon: Cpu },
   { to: "/sessions", label: "Sessions", icon: BatteryCharging },
-  { to: "/directory", label: "Cards & cars", icon: CreditCard },
-  { to: "/logs", label: "Protocol log", icon: ScrollText },
+  { to: "/directory", label: "Cards & Vehicles", icon: CreditCard },
+  { to: "/logs", label: "Protocol Logs", icon: ScrollText },
   { to: "/simulator", label: "Simulator", icon: Radio },
 ];
 

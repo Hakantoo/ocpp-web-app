@@ -95,7 +95,7 @@ export function Directory() {
     <div className="space-y-5">
       <div>
         <p className="eyebrow mb-1.5">Directory</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Cards &amp; cars</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Cards &amp; Vehicles</h1>
       </div>
 
       {failure && <ErrorNote message={failure} />}
