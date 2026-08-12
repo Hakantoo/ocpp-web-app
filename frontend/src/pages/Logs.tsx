@@ -212,7 +212,7 @@ export function Logs() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="eyebrow mb-1.5">Wire</p>
-          <h1 className="text-2xl font-semibold tracking-tight">Protocol log</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Protocol Logs</h1>
         </div>
         {data && data.length > 0 && (
           <button
