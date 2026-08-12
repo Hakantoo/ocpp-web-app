@@ -1,0 +1,20 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# The real database -- this is local state, not source. csms/db/schema.sql
+# and csms/db/seed.py are what recreate it from nothing.
+data/csms.db
+data/csms.db-wal
+data/csms.db-shm
+data/diagnostics/*
+!data/diagnostics/.gitkeep
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Editors / OS
+.DS_Store
+*.swp
