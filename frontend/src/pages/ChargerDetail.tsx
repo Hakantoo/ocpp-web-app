@@ -168,6 +168,8 @@ export function ChargerDetail() {
  *  (diagnostics, remote triggers) start open, the rest start closed.
  */
 function CommandPanel({ cp }: { cp: ChargePoint }) {
+  const [unlockConnector, setUnlockConnector] = useState(1);
+  const [availabilityConnector, setAvailabilityConnector] = useState(1);
   const getConfiguration = useChargerCommand("get-configuration");
   const diagnostics = useChargerCommand("diagnostics");
   const trigger = useChargerCommand("trigger");
@@ -358,32 +360,63 @@ function CommandPanel({ cp }: { cp: ChargePoint }) {
           description="Unlock a stuck connector, forget cached cards, or restart the charger."
           defaultOpen
         >
-          <CommandRow label="UnlockConnector" hint="Releases connector 1's latch.">
-            <Button
-              busy={busy}
-              onClick={() =>
-                send("UnlockConnector", () =>
-                  unlock.mutateAsync({ identity, body: { connector_id: 1 } }),
-                )
-              }
-            >
-              Send
-            </Button>
+          <CommandRow label="UnlockConnector" hint="Releases the selected connector's latch.">
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="w-24">
+                <p className="mb-1 text-eyebrow uppercase text-ink-faint">Connector ID</p>
+                <Select
+                  value={String(unlockConnector)}
+                  onChange={(v) => setUnlockConnector(Number(v))}
+                  options={(cp.connectors ?? [])
+                    .filter((c) => c.connector_id > 0)
+                    .map((c) => ({
+                      value: String(c.connector_id),
+                      label: String(c.connector_id),
+                    }))}
+                />
+              </div>
+              <Button
+                busy={busy}
+                onClick={() =>
+                  send(`UnlockConnector(${unlockConnector})`, () =>
+                    unlock.mutateAsync({
+                      identity,
+                      body: { connector_id: unlockConnector },
+                    }),
+                  )
+                }
+              >
+                Send
+              </Button>
+            </div>
           </CommandRow>
 
           <CommandRow
             label="ChangeAvailability"
-            hint="Takes connector 1 out of service, or brings it back -- distinct from a real Faulted condition."
+            hint="Takes the selected connector out of service, or brings it back -- distinct from a real Faulted condition."
           >
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="w-24">
+                <p className="mb-1 text-eyebrow uppercase text-ink-faint">Connector ID</p>
+                <Select
+                  value={String(availabilityConnector)}
+                  onChange={(v) => setAvailabilityConnector(Number(v))}
+                  options={(cp.connectors ?? [])
+                    .filter((c) => c.connector_id > 0)
+                    .map((c) => ({
+                      value: String(c.connector_id),
+                      label: String(c.connector_id),
+                    }))}
+                />
+              </div>
               <Button
                 variant="hold"
                 busy={busy}
                 onClick={() =>
-                  send("ChangeAvailability(Inoperative)", () =>
+                  send(`ChangeAvailability(${availabilityConnector}, Inoperative)`, () =>
                     availability.mutateAsync({
                       identity,
-                      body: { connector_id: 1, type: "Inoperative" },
+                      body: { connector_id: availabilityConnector, type: "Inoperative" },
                     }),
                   )
                 }
@@ -393,10 +426,10 @@ function CommandPanel({ cp }: { cp: ChargePoint }) {
               <Button
                 busy={busy}
                 onClick={() =>
-                  send("ChangeAvailability(Operative)", () =>
+                  send(`ChangeAvailability(${availabilityConnector}, Operative)`, () =>
                     availability.mutateAsync({
                       identity,
-                      body: { connector_id: 1, type: "Operative" },
+                      body: { connector_id: availabilityConnector, type: "Operative" },
                     }),
                   )
                 }

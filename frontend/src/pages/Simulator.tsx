@@ -226,11 +226,9 @@ export function Simulator() {
       {data.chargers.length > 0 && (
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            {data.chargers.length > 3 && (
-              <div className="flex-1">
-                <ChargerSearch value={search} onChange={setSearch} placeholder="Search chargers" />
-              </div>
-            )}
+            <div className="flex-1">
+              <ChargerSearch value={search} onChange={setSearch} placeholder="Search chargers" />
+            </div>
             <Button onClick={expandAll}>Expand all</Button>
             <Button onClick={collapseAll}>Collapse all</Button>
           </div>
@@ -275,7 +273,8 @@ export function Simulator() {
                   onToggleFavorite={() => toggleFavorite(charger.identity)}
                   containers={containers}
                   onAddToContainer={(id) => addToContainer(id, charger.identity)}
-                  onCreateContainer={(name) => createContainer(name, charger.identity)}
+                  onCreateContainer={(name) => createContainer(name, charger.identity) !== null}
+                  removeFromContainer={removeFromContainer}
                 />
               ))}
             </div>
@@ -388,7 +387,7 @@ function ChargerProvisionForm({
       } else {
         await add.mutateAsync({
           identity: trimmed,
-          connectors: connectorCount ? Number(connectorCount) : 2,
+          connectors: connectorCount ? Number(connectorCount) : 1,
           label: label.trim() || undefined,
           max_power_kw: maxPowerKw ? Number(maxPowerKw) : undefined,
           heartbeat_interval: heartbeat ? Number(heartbeat) : undefined,
@@ -475,16 +474,16 @@ function ChargerProvisionForm({
             </Field>
             <Field
               label="Connectors"
-              hint={isEdit ? "Locked — create a new charger for a different count" : "Defaults to 2"}
+              hint={isEdit ? "Locked — create a new charger for a different count" : undefined}
             >
-              <Input
-                type="number"
-                min={1}
-                max={8}
-                value={isEdit ? String(existing?.connectors.length ?? "") : connectorCount}
+              <Select
+                value={isEdit ? String(existing?.connectors.length ?? 1) : connectorCount || "1"}
                 onChange={setConnectorCount}
-                placeholder="2"
                 disabled={isEdit}
+                options={[1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({
+                  value: String(n),
+                  label: String(n),
+                }))}
               />
             </Field>
             <Field label="Max power per connector (kW)" hint="Defaults to 11">
@@ -734,6 +733,7 @@ function SimContainerCard({
               isFavorite={isFavorite(charger.identity)}
               onToggleFavorite={() => onToggleFavorite(charger.identity)}
               onRemoveFromContainer={() => onRemoveCharger(charger.identity)}
+              removeFromContainer={onRemoveCharger}
             />
           ))}
         </div>
@@ -755,6 +755,7 @@ function ChargerBench({
   onAddToContainer,
   onCreateContainer,
   onRemoveFromContainer,
+  removeFromContainer,
 }: {
   charger: SimCharger;
   existingIdentities: string[];
@@ -766,8 +767,9 @@ function ChargerBench({
   onToggleFavorite: () => void;
   containers?: Container[];
   onAddToContainer?: (containerId: string) => void;
-  onCreateContainer?: (name: string) => void;
+  onCreateContainer?: (name: string) => boolean;
   onRemoveFromContainer?: () => void;
+  removeFromContainer: (identity: string) => void;
 }) {
   const goOffline = useSimConnectionToggle("offline");
   const goOnline = useSimConnectionToggle("online");
@@ -875,8 +877,9 @@ function ChargerBench({
                   setMenuOpen(false);
                 }}
                 onCreate={(name) => {
-                  onCreateContainer?.(name);
-                  setMenuOpen(false);
+                  const ok = onCreateContainer?.(name) ?? false;
+                  if (ok) setMenuOpen(false);
+                  return ok;
                 }}
                 onClose={() => setMenuOpen(false)}
               />
@@ -938,6 +941,7 @@ function ChargerBench({
                 busy={remove.isPending}
                 onClick={async () => {
                   await remove.mutateAsync(charger.identity);
+                  removeFromContainer(charger.identity);
                   setConfirming(false);
                 }}
               >

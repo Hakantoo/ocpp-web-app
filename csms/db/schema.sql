@@ -505,7 +505,12 @@ WHERE c.connector_id > 0;
 -- definition you come back to and re-run whenever you want, which is what
 -- needs to survive a restart and be shared across devices.
 CREATE TABLE IF NOT EXISTS test_definitions (
-    id          INTEGER PRIMARY KEY,
+    -- AUTOINCREMENT, deliberately: a plain INTEGER PRIMARY KEY lets SQLite
+    -- reissue a deleted row's id to the next insert, which is exactly what
+    -- let a favorited test's id "come back" on a same-named replacement,
+    -- making it look pre-favorited even though it is a genuinely different
+    -- row. AUTOINCREMENT guarantees ids only ever increase.
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
     name        TEXT NOT NULL,
     -- The step list, exactly as the stress-test runner already understands
     -- it (see csms/domain/stress_test.py's Step dataclass) -- stored as

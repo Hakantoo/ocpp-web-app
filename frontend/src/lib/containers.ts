@@ -40,7 +40,7 @@ export interface Containers {
   containers: Container[];
   /** Which container (if any) a given charger currently belongs to. */
   containerOf: (identity: string) => Container | null;
-  createContainer: (name: string, firstMember?: string) => string;
+  createContainer: (name: string, firstMember?: string) => string | null;
   renameContainer: (id: string, name: string) => void;
   deleteContainer: (id: string) => void;
   /** Moves a charger into this container, removing it from any other it
@@ -67,9 +67,14 @@ export function useContainers(): Containers {
 
   const createContainer = useCallback(
     (name: string, firstMember?: string) => {
+      const trimmed = name.trim();
+      const duplicate = containers.some(
+        (c) => c.name.trim().toLowerCase() === trimmed.toLowerCase(),
+      );
+      if (duplicate) return null;
       const id = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
       const members = firstMember ? [firstMember] : [];
-      persist([...containers, { id, name, members }]);
+      persist([...containers, { id, name: trimmed, members }]);
       return id;
     },
     [containers, persist],

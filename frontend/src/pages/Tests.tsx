@@ -71,7 +71,7 @@ const STEP_LABELS: Record<StressStepKind, string> = {
 function blankStep(kind: StressStepKind): StressStep {
   switch (kind) {
     case "create":
-      return { kind, count: 10, connectors: 2 };
+      return { kind, count: 10, connectors: 1 };
     case "wait":
       return { kind, seconds: 1 };
     case "delete":
@@ -345,13 +345,7 @@ export function Tests() {
                         <X size={13} /> Cancel
                       </Button>
                     </div>
-                  ) : (
-                    <span className="shrink-0 text-xs text-ink-faint">
-                      {run.created_count === 0
-                        ? "No chargers left running"
-                        : `${run.created_count} charger${run.created_count === 1 ? "" : "s"} left running`}
-                    </span>
-                  )}
+                  ) : null}
                 </button>
                 {isOpen && (
                   <div className="space-y-2 p-4">
@@ -519,12 +513,13 @@ function StepRow({
             />
           </Field>
           <Field label="Connectors each">
-            <Input
-              type="number"
-              min={1}
-              max={8}
-              value={String(step.connectors ?? 2)}
+            <Select
+              value={String(step.connectors ?? 1)}
               onChange={(v) => onChange({ connectors: Number(v) })}
+              options={[1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({
+                value: String(n),
+                label: String(n),
+              }))}
             />
           </Field>
         </div>

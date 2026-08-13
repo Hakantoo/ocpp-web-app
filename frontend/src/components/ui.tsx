@@ -489,12 +489,25 @@ export function ContainerPickerPortal({
   anchor: HTMLElement;
   containers: Container[];
   onPick: (id: string) => void;
-  onCreate: (name: string) => void;
+  onCreate: (name: string) => boolean;
   onClose: () => void;
 }) {
   const [newName, setNewName] = useState("");
+  const [duplicateError, setDuplicateError] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const rect = anchor.getBoundingClientRect();
+
+  function attemptCreate() {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    const ok = onCreate(trimmed);
+    if (!ok) {
+      setDuplicateError(true);
+      return;
+    }
+    setNewName("");
+    setDuplicateError(false);
+  }
 
   useEffect(() => {
     const onClickAway = (e: MouseEvent) => {
@@ -537,21 +550,29 @@ export function ContainerPickerPortal({
           ))}
         </div>
       )}
+      {duplicateError && (
+        <p className="mb-1.5 text-xs text-signal-fault">
+          A container with that name already exists.
+        </p>
+      )}
       <div className="flex gap-1">
         <input
           autoFocus
           value={newName}
-          onChange={(e) => setNewName(e.target.value)}
+          onChange={(e) => {
+            setNewName(e.target.value);
+            setDuplicateError(false);
+          }}
           placeholder="New container"
           className="w-full rounded-md border border-line bg-panel px-2 py-1 text-xs text-ink placeholder:text-ink-faint focus:outline-none"
           onKeyDown={(e) => {
-            if (e.key === "Enter" && newName.trim()) onCreate(newName.trim());
+            if (e.key === "Enter") attemptCreate();
             if (e.key === "Escape") onClose();
           }}
         />
         <button
           type="button"
-          onClick={() => newName.trim() && onCreate(newName.trim())}
+          onClick={attemptCreate}
           className="shrink-0 rounded-md border border-line px-2 text-xs text-ink-dim hover:text-ink"
         >
           Add

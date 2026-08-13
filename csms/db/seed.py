@@ -85,8 +85,8 @@ async def seed(db: Database) -> None:
         await conn.execute(
             """
             INSERT INTO charge_points
-                (identity, label, vendor, model, serial_number, firmware_version)
-            VALUES (?, ?, ?, ?, ?, ?)
+                (identity, label, vendor, model, serial_number, firmware_version, is_simulated)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 CHARGE_POINT_ID,
@@ -95,6 +95,7 @@ async def seed(db: Database) -> None:
                 "SimAC22",
                 "SIM-0001",
                 "1.0.0",
+                1,
             ),
         )
 

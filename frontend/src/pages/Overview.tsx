@@ -310,7 +310,7 @@ export function Overview() {
                     onCommand={run}
                     containers={containers}
                     onAddToContainer={(id) => addToContainer(id, group.identity)}
-                    onCreateContainer={(name) => createContainer(name, group.identity)}
+                    onCreateContainer={(name) => createContainer(name, group.identity) !== null}
                   />
                 ))}
               </div>
@@ -363,7 +363,7 @@ function ChargerGroupCard({
   onCommand: (connector: ConnectorOverview, action: "start" | "stop" | "end") => void;
   containers?: Container[];
   onAddToContainer?: (containerId: string) => void;
-  onCreateContainer?: (name: string) => void;
+  onCreateContainer?: (name: string) => boolean;
   onRemoveFromContainer?: () => void;
 }) {
   const chargingCount = group.connectors.filter(
@@ -441,8 +441,9 @@ function ChargerGroupCard({
                   setMenuOpen(false);
                 }}
                 onCreate={(name) => {
-                  onCreateContainer?.(name);
-                  setMenuOpen(false);
+                  const ok = onCreateContainer?.(name) ?? false;
+                  if (ok) setMenuOpen(false);
+                  return ok;
                 }}
                 onClose={() => setMenuOpen(false)}
               />

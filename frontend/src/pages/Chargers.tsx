@@ -155,11 +155,9 @@ export function Chargers() {
       ) : (
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            {data.length > 3 && (
-              <div className="flex-1">
-                <ChargerSearch value={search} onChange={setSearch} />
-              </div>
-            )}
+            <div className="flex-1">
+              <ChargerSearch value={search} onChange={setSearch} />
+            </div>
             <Button onClick={expandAll}>Expand all</Button>
             <Button onClick={collapseAll}>Collapse all</Button>
           </div>
@@ -203,7 +201,7 @@ export function Chargers() {
                     onToggle={() => toggleCollapsed(cp.identity)}
                     containers={containers}
                     onAddToContainer={(id) => addToContainer(id, cp.identity)}
-                    onCreateContainer={(name) => createContainer(name, cp.identity)}
+                    onCreateContainer={(name) => createContainer(name, cp.identity) !== null}
                   />
                 ))}
               </div>
@@ -375,7 +373,7 @@ function ChargerCard({
   onToggle?: () => void;
   containers?: Container[];
   onAddToContainer?: (containerId: string) => void;
-  onCreateContainer?: (name: string) => void;
+  onCreateContainer?: (name: string) => boolean;
   onRemoveFromContainer?: () => void;
 }) {
   const { data: uptime } = useUptimeSummary(cp.identity);
@@ -480,8 +478,9 @@ function ChargerCard({
                     setMenuOpen(false);
                   }}
                   onCreate={(name) => {
-                    onCreateContainer?.(name);
-                    setMenuOpen(false);
+                    const ok = onCreateContainer?.(name) ?? false;
+                    if (ok) setMenuOpen(false);
+                    return ok;
                   }}
                   onClose={() => setMenuOpen(false)}
                 />
@@ -543,12 +542,14 @@ function ChargerCard({
  *  should be able to do. */
 function DeleteConfirm({ identity, onClose }: { identity: string; onClose: () => void }) {
   const del = useDeleteChargePoint();
+  const { removeFromContainer } = useContainers();
   const [error, setError] = useState<string | null>(null);
 
   async function confirm() {
     setError(null);
     try {
       await del.mutateAsync(identity);
+      removeFromContainer(identity);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete that charger");
