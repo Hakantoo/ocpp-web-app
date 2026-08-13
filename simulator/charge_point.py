@@ -415,7 +415,18 @@ class SimulatedChargePoint(BaseChargePoint):
         connector.power_offered = offered
         if offered:
             if connector.transaction_id is not None and not connector.suspended_by_evse:
-                await self._status(connector_id, ChargePointStatus.charging.value)
+                # A full battery cannot draw power no matter what the EVSE
+                # offers -- reporting Charging here would be a real, honest
+                # falsehood about what is actually happening electrically.
+                already_full = (
+                    connector.vehicle is not None and connector.vehicle.is_full
+                )
+                status = (
+                    ChargePointStatus.suspended_ev.value
+                    if already_full
+                    else ChargePointStatus.charging.value
+                )
+                await self._status(connector_id, status)
             # A 0 W pause profile (the dashboard's Stop / hold) takes
             # precedence over the C switch: reporting Charging here would
             # override a hold the operator explicitly asked for. No
@@ -520,9 +531,14 @@ class SimulatedChargePoint(BaseChargePoint):
             return
         connector.transaction_id = int(response.transaction_id)
         connector.active_id_tag = id_tag
+        # A full battery cannot draw power regardless of whether the C
+        # switch happened to already be on before this transaction started
+        # (e.g. left on from a prior action on this connector) -- reporting
+        # Charging in that case would be the same dishonest claim as above.
+        already_full = connector.vehicle is not None and connector.vehicle.is_full
         status = (
             ChargePointStatus.charging.value
-            if connector.power_offered
+            if connector.power_offered and not already_full
             else ChargePointStatus.suspended_ev.value
         )
         await self._status(connector.connector_id, status)

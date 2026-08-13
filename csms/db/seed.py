@@ -82,11 +82,17 @@ async def seed(db: Database) -> None:
         )
 
         # -- charge point ---------------------------------------------------
+        # is_simulated is set here: CP001 is meant to be reconnected
+        # automatically by the simulator on every restart (see
+        # simulator/main.py's own reconnection filter), and leaving this
+        # unset falls back to the schema default of 0, which makes CP001
+        # look like real hardware and get correctly excluded from that
+        # filter -- the exact bug this fixes.
         await conn.execute(
             """
             INSERT INTO charge_points
-                (identity, label, vendor, model, serial_number, firmware_version)
-            VALUES (?, ?, ?, ?, ?, ?)
+                (identity, label, vendor, model, serial_number, firmware_version, is_simulated)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 CHARGE_POINT_ID,
@@ -95,6 +101,7 @@ async def seed(db: Database) -> None:
                 "SimAC22",
                 "SIM-0001",
                 "1.0.0",
+                1,
             ),
         )
 
