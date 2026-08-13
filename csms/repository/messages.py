@@ -95,6 +95,7 @@ async def for_session_window(
     charge_point_id: str,
     start: str,
     end: str | None = None,
+    connector_id: int | None = None,
     limit: int = 500,
 ) -> list[dict[str, Any]]:
     """Frames exchanged with one charger during one session's lifetime.
@@ -105,17 +106,36 @@ async def for_session_window(
     either logging late (and losing frames that crash a handler) or updating
     rows afterwards. Timestamps are fixed-width ISO-8601 UTC, so the range
     comparison is exact.
+
+    A charger with more than one connector sends interleaved traffic for
+    all of them over the same connection, so the time window alone is not
+    enough -- a session's detail page would otherwise show another
+    connector's StatusNotification and MeterValues mixed into frames that
+    have nothing to do with it. connector_id, when given, filters those out
+    by reading the connectorId genuinely present in the frame's own JSON
+    payload. A frame that carries no connectorId at all (Heartbeat, and
+    several CALLRESULTs) is kept rather than excluded -- there is no honest
+    basis to say it does not belong just because it does not say either way.
     """
+    connector_clause = ""
+    params: tuple[Any, ...] = (charge_point_id, start, end, end)
+    if connector_id is not None:
+        connector_clause = (
+            " AND (json_extract(payload, '$.connectorId') IS NULL"
+            "      OR json_extract(payload, '$.connectorId') = ?)"
+        )
+        params = (charge_point_id, start, end, end, connector_id)
     async with conn.execute(
-        """
+        f"""
         SELECT * FROM message_log
          WHERE charge_point_id = ?
            AND timestamp >= ?
            AND (? IS NULL OR timestamp <= ?)
+           {connector_clause}
          ORDER BY id
          LIMIT ?
         """,
-        (charge_point_id, start, end, end, limit),
+        (*params, limit),
     ) as cur:
         return [dict(r) for r in await cur.fetchall()]
 

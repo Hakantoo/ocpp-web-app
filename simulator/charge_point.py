@@ -694,17 +694,27 @@ class SimulatedChargePoint(BaseChargePoint):
             )
             return
 
-        # Recovering: restore whatever this connector was actually showing
-        # right before the fault hit, whenever that is known. This is
-        # deliberately not re-derived from the current flags (transaction_id,
-        # power_offered, a pause profile) -- a fault can land on any real
-        # combination of those (SuspendedEVSE while still offering power,
-        # SuspendedEV with it off, mid-transaction Charging, and so on), and
-        # trying to reconstruct which one it was from the flags alone is
-        # exactly what missed SuspendedEVSE the first time this was written.
-        # pre_fault_status is the literal truth, not a guess, so it always
-        # wins when it exists.
-        if connector is not None and connector.pre_fault_status is not None:
+        # Recovering: while a transaction is genuinely open, the live flags
+        # (power_offered, the pause profile, whether the battery is full)
+        # are the honest source of truth -- they can have changed while the
+        # connector sat faulted (offering power mid-fault is a real,
+        # supported action), and pre_fault_status is only ever a snapshot
+        # frozen at the instant the fault began. Blindly restoring that
+        # snapshot after the flags moved on is exactly what left a
+        # connector stuck reporting SuspendedEV while energy was genuinely
+        # flowing underneath it. pre_fault_status still wins for the two
+        # states no live flag can express at all -- Preparing, before any
+        # transaction exists, and Finishing, after one has already closed.
+        if connector is not None and connector.transaction_id is not None:
+            if connector.suspended_by_evse:
+                recovered = ChargePointStatus.suspended_evse.value
+            elif connector.vehicle is not None and connector.vehicle.is_full:
+                recovered = ChargePointStatus.suspended_ev.value
+            elif connector.power_offered:
+                recovered = ChargePointStatus.charging.value
+            else:
+                recovered = ChargePointStatus.suspended_ev.value
+        elif connector is not None and connector.pre_fault_status is not None:
             recovered = connector.pre_fault_status
         elif connector is not None and connector.plugged_in:
             recovered = ChargePointStatus.preparing.value

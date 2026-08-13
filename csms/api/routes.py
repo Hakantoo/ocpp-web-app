@@ -495,6 +495,7 @@ async def get_session(request: Request, session_id: int) -> dict[str, Any]:
             charge_point_id=session["charge_point_id"],
             start=session["plugged_in_at"],
             end=session["ended_at"],
+            connector_id=session["connector_id"],
         )
     return session
 
