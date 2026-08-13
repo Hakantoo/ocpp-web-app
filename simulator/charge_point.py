@@ -43,6 +43,7 @@ from ocpp.v16 import call, call_result
 from ocpp.v16.enums import (
     Action,
     AvailabilityStatus,
+    CancelReservationStatus,
     ChargePointErrorCode,
     ChargePointStatus,
     ChargingProfileStatus,
@@ -50,10 +51,13 @@ from ocpp.v16.enums import (
     ClearChargingProfileStatus,
     ConfigurationStatus,
     DataTransferStatus,
+    GetCompositeScheduleStatus,
     RemoteStartStopStatus,
+    ReservationStatus,
     ResetStatus,
     TriggerMessageStatus,
     UnlockStatus,
+    UpdateStatus,
 )
 
 from .vehicle import Vehicle
@@ -103,6 +107,14 @@ class Connector:
 
     # Set once the battery is full, so the shutdown only runs once.
     winding_down: bool = False
+    # The pending "close the transaction after the dwell" task, if the
+    # battery is currently full and waiting out full_dwell_seconds before
+    # StopTransaction fires. Needs to be genuinely cancelled if a fault
+    # interrupts that wait -- otherwise it fires independently later and
+    # silently closes the transaction regardless of the fault, which is
+    # exactly the "transaction closes underneath a fault" bug this whole
+    # rewrite was meant to prevent.
+    dwell_task: asyncio.Task[None] | None = None
 
     # The "C switch": whether the EVSE side is currently offering power at
     # all, independent of whether a transaction has been authorized. Real
@@ -177,6 +189,15 @@ class SimulatedChargePoint(BaseChargePoint):
             "ChargeProfileMaxStackLevel": ("10", True),
         }
         self._tasks: list[asyncio.Task[Any]] = []
+        # SendLocalList/GetLocalListVersion track one real version number,
+        # genuinely incremented by Full/Differential updates -- not a fixed
+        # constant, so a GetLocalListVersion after a real SendLocalList
+        # honestly reflects what was actually sent.
+        self.local_list_version = 0
+        # ReserveNow/CancelReservation: which reservation ids are genuinely
+        # active right now, so a real double-reservation or an unknown
+        # cancellation gets an honest answer instead of always accepting.
+        self.active_reservations: set[int] = set()
         # Which inbound OCPP actions this charger currently refuses outright,
         # for testing how the CSMS handles a charger that will not honour a
         # given command. Real rejection replies, not silence -- the CSMS
@@ -307,8 +328,9 @@ class SimulatedChargePoint(BaseChargePoint):
             # dwell also means the state is visible rather than a flicker.
             await asyncio.sleep(self.full_dwell_seconds)
             await self.stop_transaction(connector, reason="Local")
+            connector.dwell_task = None
 
-        asyncio.create_task(_close_after_dwell())
+        connector.dwell_task = asyncio.create_task(_close_after_dwell())
 
     def _advance_meter(self, connector: Connector, seconds: float) -> None:
         """Move the energy register forward, unless something is holding it.
@@ -320,6 +342,14 @@ class SimulatedChargePoint(BaseChargePoint):
         is the whole trick behind exact resume.
         """
         if connector.transaction_id is None or connector.vehicle is None:
+            return
+        if connector.status == ChargePointStatus.faulted.value:
+            # A real fault (this simulator always injects ground_failure)
+            # means power delivery has genuinely stopped, not merely that
+            # the reported status changed -- confirmed by testing: without
+            # this check, the meter kept counting energy upward the entire
+            # time a connector was faulted mid-charge, which is physically
+            # wrong and would silently over-report delivered energy.
             return
         if connector.suspended_by_evse or not connector.power_offered:
             return
@@ -419,6 +449,15 @@ class SimulatedChargePoint(BaseChargePoint):
         if connector is None:
             return
         connector.power_offered = offered
+        if connector.status == ChargePointStatus.faulted.value:
+            # Still genuinely faulted: the C switch is a real physical
+            # toggle, but nothing about flipping it changes a fault
+            # condition. The flag itself still updates above (so the
+            # correct state is picked up once the fault clears), but no
+            # status is reported now -- reporting one here would silently
+            # overwrite the Faulted announcement with a spontaneous change,
+            # exactly what real hardware never does mid-fault.
+            return
         if offered:
             if connector.transaction_id is not None and not connector.suspended_by_evse:
                 # A full battery cannot draw power no matter what the EVSE
@@ -441,9 +480,15 @@ class SimulatedChargePoint(BaseChargePoint):
             # there -- exactly the "stuck at Preparing" behavior confirmed
             # against real hardware when C is on but RFID has not happened.
         else:
-            if connector.transaction_id is not None:
+            if connector.transaction_id is not None and not connector.suspended_by_evse:
+                # A 0 W pause profile is still the dominant reason nothing
+                # is flowing here -- withdrawing the C switch on top of an
+                # existing SuspendedEVSE hold must not overwrite it with
+                # SuspendedEV, the same precedence the offer-power branch
+                # above already follows.
                 await self._status(connector_id, ChargePointStatus.suspended_ev.value)
-            # No transaction: nothing was flowing anyway, nothing to change.
+            # No transaction, or already held by our own profile: nothing
+            # genuinely changed, nothing to report.
 
     async def swipe_card(self, connector_id: int, id_tag: str) -> str:
         """Present a card at the reader.
@@ -625,6 +670,19 @@ class SimulatedChargePoint(BaseChargePoint):
             # if the cable had just been plugged in.
             if connector is not None:
                 connector.pre_fault_status = connector.status
+                # A fault landing while the battery is full and waiting out
+                # its dwell before closing must genuinely interrupt that
+                # wait -- otherwise the pending close fires independently
+                # later and silently ends the transaction underneath the
+                # fault, which is exactly the behavior this whole fault
+                # rewrite exists to prevent. winding_down resets too, so a
+                # fresh full-battery check can genuinely re-trigger the
+                # close once the fault clears and charging (if resumed)
+                # reaches full again.
+                if connector.dwell_task is not None:
+                    connector.dwell_task.cancel()
+                    connector.dwell_task = None
+                connector.winding_down = False
             # Report the fault. The transaction is left running -- no
             # StopTransaction, no change to connector.transaction_id -- so
             # MeterValues can keep flowing under it exactly as a real fault
@@ -751,7 +809,7 @@ class SimulatedChargePoint(BaseChargePoint):
         connector.power_limit_w = limit_w
         connector.active_profile_id = cs_charging_profiles.get("charging_profile_id")
 
-        if connector.transaction_id is not None:
+        if connector.transaction_id is not None and connector.status != ChargePointStatus.faulted.value:
             if limit_w <= 0:
                 next_status = ChargePointStatus.suspended_evse.value
             elif connector.power_offered:
@@ -793,7 +851,7 @@ class SimulatedChargePoint(BaseChargePoint):
                 cleared = True
             connector.power_limit_w = None
             connector.active_profile_id = None
-            if connector.transaction_id is not None:
+            if connector.transaction_id is not None and connector.status != ChargePointStatus.faulted.value:
                 next_status = (
                     ChargePointStatus.charging.value
                     if connector.power_offered
@@ -885,7 +943,99 @@ class SimulatedChargePoint(BaseChargePoint):
     ) -> call_result.ChangeAvailability:
         return call_result.ChangeAvailability(status=AvailabilityStatus.accepted)
 
-    @on(Action.get_diagnostics)
+    @on(Action.get_composite_schedule)
+    async def on_get_composite_schedule(
+        self, connector_id: int, duration: int, **kwargs: Any
+    ) -> call_result.GetCompositeSchedule:
+        """What this connector would actually deliver, right now, for the
+        requested window.
+
+        Real hardware varies a lot in how it computes this -- the spec
+        defines the shape of the answer, not the calculation -- so this
+        gives an honest, single-period schedule reflecting the connector's
+        genuine current limit rather than fabricating a forecast the
+        simulator has no real scheduling engine to produce. connectorId 0
+        would mean "the whole charge point", which nothing here models, so
+        that (and any unknown connector) is rejected rather than guessed at.
+        """
+        connector = self.connectors.get(connector_id)
+        if connector_id == 0 or connector is None:
+            return call_result.GetCompositeSchedule(
+                status=GetCompositeScheduleStatus.rejected
+            )
+        unit = kwargs.get("charging_rate_unit", "W")
+        limit_w = connector.power_limit_w
+        if limit_w is None:
+            limit_w = connector.limit_kw() * 1000.0
+        limit = limit_w if unit == "W" else limit_w / 230.0  # W -> A
+        return call_result.GetCompositeSchedule(
+            status=GetCompositeScheduleStatus.accepted,
+            connector_id=connector_id,
+            schedule_start=utcnow_iso(),
+            charging_schedule={
+                "duration": duration,
+                "start_schedule": utcnow_iso(),
+                "charging_rate_unit": unit,
+                "charging_schedule_period": [
+                    {"start_period": 0, "limit": round(limit, 1)}
+                ],
+            },
+        )
+
+    @on(Action.get_local_list_version)
+    async def on_get_local_list_version(self) -> call_result.GetLocalListVersion:
+        return call_result.GetLocalListVersion(list_version=self.local_list_version)
+
+    @on(Action.send_local_list)
+    async def on_send_local_list(
+        self, list_version: int, update_type: str, **kwargs: Any
+    ) -> call_result.SendLocalList:
+        """A real, honest version check -- a Differential update older than
+        or equal to what we already have is genuinely stale and refused,
+        matching how real hardware protects against an out-of-order update.
+        A Full update always replaces the version outright, same as the
+        real semantics of "Full" in the spec.
+        """
+        if update_type == "Differential" and list_version <= self.local_list_version:
+            return call_result.SendLocalList(status=UpdateStatus.version_mismatch)
+        self.local_list_version = list_version
+        return call_result.SendLocalList(status=UpdateStatus.accepted)
+
+    @on(Action.reserve_now)
+    async def on_reserve_now(
+        self, connector_id: int, reservation_id: int, **kwargs: Any
+    ) -> call_result.ReserveNow:
+        connector = self.connectors.get(connector_id)
+        if connector is None:
+            return call_result.ReserveNow(status=ReservationStatus.rejected)
+        if connector.status == ChargePointStatus.faulted.value:
+            return call_result.ReserveNow(status=ReservationStatus.faulted)
+        if connector.transaction_id is not None or connector.plugged_in:
+            return call_result.ReserveNow(status=ReservationStatus.occupied)
+        self.active_reservations.add(reservation_id)
+        return call_result.ReserveNow(status=ReservationStatus.accepted)
+
+    @on(Action.cancel_reservation)
+    async def on_cancel_reservation(
+        self, reservation_id: int
+    ) -> call_result.CancelReservation:
+        if reservation_id in self.active_reservations:
+            self.active_reservations.discard(reservation_id)
+            return call_result.CancelReservation(
+                status=CancelReservationStatus.accepted
+            )
+        return call_result.CancelReservation(status=CancelReservationStatus.rejected)
+
+    @on(Action.update_firmware)
+    async def on_update_firmware(self, location: str, retrieve_date: str, **kwargs: Any):
+        """No reply body at all -- confirmed against the library's own
+        call_result.UpdateFirmware, which takes no fields. Real progress is
+        reported separately, over time, via FirmwareStatusNotification, not
+        in this response."""
+        log.info("UpdateFirmware requested from %s", location)
+        return call_result.UpdateFirmware()
+
+
     async def on_get_diagnostics(self, location, **_):
         """Pretend to upload logs, reporting progress as a real charger would.
 
